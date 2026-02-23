@@ -541,32 +541,43 @@
         };
 
         const fetchCloud = async (url) => {
-            if (!url) return null;
+            if (!url) {
+                showToast("Cloud URL not configured!");
+                return null;
+            }
             try {
                 console.log("Fetching from Cloud: ", url);
                 const res = await fetch(url);
-                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 console.log("Cloud Data received:", data);
                 return data;
             } catch (e) {
                 console.error("Cloud Fetch Error:", e);
+                showToast(`Pull Failed: ${e.message}`);
                 return null;
             }
         };
 
         const saveCloud = async (url, data) => {
-            if (!url) return false;
+            if (!url) {
+                showToast("Cloud URL not configured!");
+                return false;
+            }
             try {
                 console.log("Saving to Cloud:", url);
+                // We use 'text/plain' as content-type to avoid CORS preflight (OPTIONS request) 
+                // which Google Apps Script doPost doesn't support easily.
                 const res = await fetch(url, {
                     method: 'POST',
+                    mode: 'no-cors', // Note: with no-cors we won't see if it actually succeeded
                     body: JSON.stringify(data)
                 });
-                console.log("Cloud Save result:", res);
+                console.log("Cloud Save triggered (no-cors mode)");
                 return true;
             } catch (e) {
                 console.error("Cloud Save Error:", e);
+                showToast(`Push Error: ${e.message}`);
                 return false;
             }
         };
