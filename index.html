@@ -597,6 +597,12 @@
             if (diffTime < 0) return 0;
             return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
         };
+        const formatDate = (dateStr) => {
+            if (!dateStr || dateStr === 'Never') return dateStr;
+            const [y, m, d] = dateStr.split('-');
+            if (!y || !m || !d) return dateStr;
+            return `${d}/${m}/${y}`;
+        };
         const showToast = (msg) => {
             const t = document.getElementById('toast');
             t.textContent = msg;
@@ -912,7 +918,7 @@
                             <div className="avatar">{s.name[0]}</div>
                             <div className="info">
                                 <h3>{s.name}</h3>
-                                <p>{formatCurrency(s.dailyWage)} / day • Since {s.startDate}</p>
+                                <p>{formatCurrency(s.dailyWage)} / day • Since {formatDate(s.startDate)}</p>
                             </div>
                             <button className="icon-btn" onClick={() => toggleArchive(s, true)} title="Archive">
                                 <Icons.Archive />
@@ -988,6 +994,7 @@
                     newList.unshift({ id: generateId(), staffId, date, status });
                 }
 
+                newList.sort((a, b) => b.date.localeCompare(a.date));
                 setData({ ...data, attendance: newList });
                 showToast("Attendance marked!");
             };
@@ -1016,7 +1023,8 @@
                     curr.setDate(curr.getDate() + 1);
                 }
 
-                setData({ ...data, attendance: [...newRecords, ...data.attendance] });
+                const combined = [...newRecords, ...data.attendance].sort((a, b) => b.date.localeCompare(a.date));
+                setData({ ...data, attendance: combined });
                 showToast(`Marked ${newRecords.length} days!`);
             };
 
@@ -1099,7 +1107,7 @@
                             <label style={{ fontSize: '0.8rem' }}>Filter by Staff</label>
                             <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)}>
                                 <option value="all">All Staff</option>
-                                {allStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                {data.staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                         </div>
                         <div className="form-group" style={{ marginBottom: 0 }}>
@@ -1125,7 +1133,7 @@
                                 <div className="avatar" style={{ width: 32, height: 32, fontSize: '0.8rem', marginRight: 10 }}>{s.name[0]}</div>
                                 <div className="info">
                                     <h3 style={{ fontSize: '0.9rem' }}>{s.name}</h3>
-                                    <p>{a.date}</p>
+                                    <p>{formatDate(a.date)}</p>
                                 </div>
                                 <div className="flex" style={{ gap: 8 }}>
                                     <span className={`badge ${a.status === 'absent' ? 'badge-orange' : 'badge-amber'}`}>
@@ -1182,7 +1190,8 @@
                 e.preventDefault();
                 if (!staffId || !amount) return;
                 const newPay = { id: generateId(), staffId, amount: Number(amount), date, note };
-                setData({ ...data, payments: [newPay, ...data.payments] });
+                const newList = [newPay, ...data.payments].sort((a, b) => b.date.localeCompare(a.date));
+                setData({ ...data, payments: newList });
                 setAmount(''); setNote('');
                 showToast("Payment recorded!");
             };
@@ -1228,7 +1237,7 @@
                             <label style={{ fontSize: '0.8rem' }}>Filter by Staff</label>
                             <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)}>
                                 <option value="all">All Staff</option>
-                                {allStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                {data.staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                         </div>
                         <div className="form-group" style={{ marginBottom: 0 }}>
@@ -1259,7 +1268,7 @@
                                 <div className="avatar" style={{ width: 32, height: 32, fontSize: '0.8rem', marginRight: 10 }}>{s.name[0]}</div>
                                 <div className="info">
                                     <h3 style={{ fontSize: '0.9rem' }}>{s.name} - {formatCurrency(p.amount)}</h3>
-                                    <p>{p.date} {p.note && `• ${p.note}`}</p>
+                                    <p>{formatDate(p.date)} {p.note && `• ${p.note}`}</p>
                                 </div>
                                 <button className="icon-btn" onClick={() => handleDelete(p.id)}><Icons.Trash /></button>
                             </div>
@@ -1289,7 +1298,7 @@
                     <div className="form-group">
                         <label>Select Staff</label>
                         <select value={selectedId} onChange={e => setSelectedId(e.target.value)}>
-                            {allStaff.map(s => <option key={s.id} value={s.id}>{s.name} {s.archived ? '(Archived)' : ''}</option>)}
+                            {data.staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                     </div>
 
@@ -1304,7 +1313,7 @@
                         </div>
                         <div className="summary-box box-balance">
                             <h4>{stats.balance < 0 ? 'Advance' : 'Due'}</h4>
-                            <p className={stats.balance < 0 ? 'text-green' : stats.balance > 0 ? 'text-red' : ''}>
+                            <p className={stats.balance < 0 ? 'text-red' : stats.balance > 0 ? 'text-green' : ''}>
                                 {formatCurrency(Math.abs(stats.balance))}
                             </p>
                         </div>
@@ -1343,7 +1352,7 @@
                             {data.payments.find(p => p.staffId === selectedId) ? (
                                 (() => {
                                     const lp = data.payments.find(p => p.staffId === selectedId);
-                                    return <p style={{ margin: 0 }}><b>{formatCurrency(lp.amount)}</b> on {lp.date}</p>
+                                    return <p style={{ margin: 0 }}><b>{formatCurrency(lp.amount)}</b> on {formatDate(lp.date)}</p>
                                 })()
                             ) : <p style={{ margin: 0 }}>No payments recorded yet</p>}
                         </div>
@@ -1376,9 +1385,13 @@
                     const stats = calculate(s.id);
                     return sum + (stats.balance > 0 ? stats.balance : 0);
                 }, 0);
+                const totalAdvance = data.staff.reduce((sum, s) => {
+                    const stats = calculate(s.id);
+                    return sum + (stats.balance < 0 ? Math.abs(stats.balance) : 0);
+                }, 0);
                 const currentMonthPayments = filteredData.payments.reduce((sum, p) => sum + Number(p.amount), 0);
 
-                return { activeStaff, monthlyBill, totalOwed, currentMonthPayments };
+                return { activeStaff, monthlyBill, totalOwed, totalAdvance, currentMonthPayments };
             }, [data.staff, calculate, filteredData, month, year]);
 
             const handlePrint = () => window.print();
@@ -1393,52 +1406,31 @@
                     date: getToday(),
                     note: `Settlement for ${month} / ${year}`
                 };
-                setData(prev => ({ ...prev, payments: [newPay, ...prev.payments] }));
+                const newList = [newPay, ...prev.payments].sort((a, b) => b.date.localeCompare(a.date));
+                setData(prev => ({ ...prev, payments: newList }));
                 showToast("Payment recorded!");
             };
 
             return (
                 <div className="report-view">
-                    <h2 className="no-print">Reports & Analytics</h2>
-
-                    <div className="card no-print">
-                        <label>Report Type</label>
-                        <select value={reportType} onChange={e => setReportType(e.target.value)}>
-                            <option value="monthly">Monthly Staff Report</option>
-                            <option value="financial">Financial Summary</option>
-                            <option value="attendance">Attendance Register</option>
-                        </select>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', marginTop: '10px' }}>
-                            <div>
-                                <label>Month</label>
-                                <select value={month} onChange={e => setMonth(Number(e.target.value))}>
-                                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('default', { month: 'long' })}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label>Year</label>
-                                <select value={year} onChange={e => setYear(Number(e.target.value))}>
-                                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        <button className="btn btn-primary mt-10" onClick={handlePrint}>Print to PDF</button>
-                    </div>
-
                     <div className="no-print" style={{ marginBottom: 30 }}>
                         <h3 style={{ fontSize: '1rem' }}>Quick Stats</h3>
-                        <div className="summary-grid">
+                        <div className="summary-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                             <div className="card" style={{ padding: 10, textAlign: 'center' }}>
                                 <h4 style={{ fontSize: '0.6rem', color: 'var(--text-medium)' }}>ACTIVE</h4>
                                 <p style={{ fontSize: '1rem', fontWeight: 700 }}>{quickStats.activeStaff}</p>
                             </div>
                             <div className="card" style={{ padding: 10, textAlign: 'center' }}>
                                 <h4 style={{ fontSize: '0.6rem', color: 'var(--text-medium)' }}>MONTH BILL</h4>
-                                <p style={{ fontSize: '1rem', fontWeight: 700 }}>₹{Math.round(quickStats.monthlyBill / 1000)}k</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 700 }}>₹{quickStats.monthlyBill}</p>
                             </div>
                             <div className="card" style={{ padding: 10, textAlign: 'center' }}>
                                 <h4 style={{ fontSize: '0.6rem', color: 'var(--text-medium)' }}>TOTAL DUE</h4>
-                                <p style={{ fontSize: '1rem', fontWeight: 700, color: 'red' }}>₹{Math.round(quickStats.totalOwed / 1000)}k</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 700, color: '#43a047' }}>₹{quickStats.totalOwed}</p>
+                            </div>
+                            <div className="card" style={{ padding: 10, textAlign: 'center' }}>
+                                <h4 style={{ fontSize: '0.6rem', color: 'var(--text-medium)' }}>ADVANCE</h4>
+                                <p style={{ fontSize: '1rem', fontWeight: 700, color: '#e53935' }}>₹{quickStats.totalAdvance}</p>
                             </div>
                         </div>
                     </div>
@@ -1458,17 +1450,26 @@
                                     const mRange = { start: `${year}-${String(month).padStart(2, '0')}-01`, end: `${year}-${String(month).padStart(2, '0')}-${lastDay}` };
                                     const mStats = calculate(s.id, mRange);
                                     const gStats = calculate(s.id);
+                                    const lastAt = data.attendance.find(a => a.staffId === s.id)?.date;
+                                    const lastPa = data.payments.find(p => p.staffId === s.id)?.date;
+                                    const lastUpdated = (lastAt && lastPa) ? (lastAt > lastPa ? lastAt : lastPa) : (lastAt || lastPa || 'Never');
+
                                     return (
                                         <div className="card" key={s.id} style={{ marginBottom: 10 }}>
                                             <div className="flex justify-between">
                                                 <h4 style={{ margin: 0 }}>{s.name}</h4>
                                                 <span className="badge badge-orange">{formatCurrency(s.dailyWage)}/day</span>
                                             </div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-medium)', marginBottom: 5 }}>
+                                                Last updated on: <b>{formatDate(lastUpdated)}</b>
+                                            </div>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10, fontSize: '0.85rem' }}>
                                                 <div>Month Earned: <b>{formatCurrency(mStats.earned)}</b></div>
                                                 <div>Month Paid: {formatCurrency(mStats.paid)}</div>
                                                 <div>Absences: {mStats.absent}F, {mStats.half}H</div>
-                                                <div className="text-red">Total Due: <b>{formatCurrency(gStats.balance > 0 ? gStats.balance : 0)}</b></div>
+                                                <div className={gStats.balance > 0 ? 'text-green' : 'text-red'}>
+                                                    {gStats.balance > 0 ? 'Total Due: ' : 'Total Advance: '} <b>{formatCurrency(Math.abs(gStats.balance))}</b>
+                                                </div>
                                             </div>
                                             {gStats.balance > 0 && (
                                                 <button className="btn btn-sm btn-ghost no-print mt-10" onClick={() => recordMonthlyPayment(s.id, gStats.balance)}>
@@ -1495,14 +1496,14 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {[...data.staff, ...data.archivedStaff].map(s => {
+                                            {data.staff.map(s => {
                                                 const st = calculate(s.id);
                                                 return (
                                                     <tr key={s.id}>
-                                                        <td style={{ padding: 10, borderBottom: '1px solid var(--border-cream)' }}>{s.name} {s.archived ? '(Archived)' : ''}</td>
+                                                        <td style={{ padding: 10, borderBottom: '1px solid var(--border-cream)' }}>{s.name}</td>
                                                         <td style={{ padding: 10, borderBottom: '1px solid var(--border-cream)' }}>{formatCurrency(st.earned)}</td>
                                                         <td style={{ padding: 10, borderBottom: '1px solid var(--border-cream)' }}>{formatCurrency(st.paid)}</td>
-                                                        <td style={{ padding: 10, borderBottom: '1px solid var(--border-cream)', fontWeight: 600 }} className={st.balance > 0 ? 'text-red' : 'text-green'}>
+                                                        <td style={{ padding: 10, borderBottom: '1px solid var(--border-cream)', fontWeight: 600 }} className={st.balance > 0 ? 'text-green' : 'text-red'}>
                                                             {formatCurrency(st.balance)}
                                                         </td>
                                                     </tr>
@@ -1523,7 +1524,7 @@
                                             const s = [...data.staff, ...data.archivedStaff].find(st => st.id === a.staffId);
                                             return (
                                                 <div key={a.id} className="row-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                    <span>{a.date} - <b>{s?.name}</b></span>
+                                                    <span>{formatDate(a.date)} - <b>{s?.name}</b></span>
                                                     <span className={`badge ${a.status === 'absent' ? 'badge-orange' : 'badge-amber'}`}>{a.status}</span>
                                                 </div>
                                             );
@@ -1532,6 +1533,31 @@
                                 )}
                             </div>
                         )}
+                    </div>
+
+                    <h2 className="no-print" style={{ marginTop: 40 }}>Reports & Analysis</h2>
+                    <div className="card no-print">
+                        <label>Report Type</label>
+                        <select value={reportType} onChange={e => setReportType(e.target.value)}>
+                            <option value="monthly">Monthly Staff Report</option>
+                            <option value="financial">Financial Summary</option>
+                            <option value="attendance">Attendance Register</option>
+                        </select>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', marginTop: '10px' }}>
+                            <div>
+                                <label>Month</label>
+                                <select value={month} onChange={e => setMonth(Number(e.target.value))}>
+                                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('default', { month: 'long' })}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label>Year</label>
+                                <select value={year} onChange={e => setYear(Number(e.target.value))}>
+                                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <button className="btn btn-primary mt-10" onClick={handlePrint}>Print to PDF</button>
                     </div>
                 </div>
             );
