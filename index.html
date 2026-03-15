@@ -513,9 +513,9 @@
 
         const getSettings = () => {
             const defaults = {
-                cloudUrl: 'https://script.google.com/macros/s/AKfycbz6DBG4JM3QTRJxGr28OJNpPVYaFpY7Hanec_pDUA_mmLAiJPvq_P-bFqjvOIcj4d7C/exec',
-                username: 'Jayeshp',
-                password: 'jay@#$851'
+                cloudUrl: '',
+                username: '',
+                password: ''
             };
             const s = localStorage.getItem(SETTINGS_KEY);
             if (!s) return defaults;
@@ -543,18 +543,45 @@
             else localStorage.setItem(STORAGE_KEY, str);
         };
 
+        const parseCloudResponse = (data) => {
+            if (!data || typeof data !== 'object') return null;
+
+            // 1. Check if it's the structure we want directly
+            if (data.staff || data.attendance) return data;
+
+            // 2. Check if it's wrapped in 'data' (common for Apps Script)
+            if (data.data) {
+                if (typeof data.data === 'string') {
+                    try { return parseCloudResponse(JSON.parse(data.data)); } catch (e) { return null; }
+                }
+                if (typeof data.data === 'object') return parseCloudResponse(data.data);
+            }
+
+            // 3. Fallback: If it has any of our keys nested, return that parent
+            const keys = ['staff', 'attendance', 'payments', 'archivedStaff'];
+            for (let key of keys) {
+                if (data[key]) return data;
+            }
+
+            return data;
+        };
+
         const fetchCloud = async (url) => {
             if (!url) {
                 showToast("Cloud URL not configured!");
                 return null;
             }
             try {
-                console.log("Fetching from Cloud: ", url);
                 const res = await fetch(url);
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
-                const data = await res.json();
-                console.log("Cloud Data received:", data);
-                return data;
+                let rawData = await res.json();
+                const parsed = parseCloudResponse(rawData);
+
+                // DIAGNOSTIC LOG: This helps the user give us the exact structure
+                console.log(">>> CLOUD SYNC DIAGNOSTIC <<<");
+                console.log("Structure:", JSON.stringify(parsed).substring(0, 200) + "...");
+
+                return parsed;
             } catch (e) {
                 console.error("Cloud Fetch Error:", e);
                 showToast(`Pull Failed: ${e.message}`);
@@ -627,14 +654,33 @@
 
         const App = () => {
             const [data, setData] = useState({ staff: [], archivedStaff: [], attendance: [], payments: [] });
-            const [settings, setSettingsState] = useState({ cloudUrl: '', username: 'admin', password: 'password' });
+            const [settings, setSettingsState] = useState({ cloudUrl: '', username: '', password: '' });
             const [activeTab, setActiveTab] = useState('reports');
             const [loading, setLoading] = useState(true);
             const [syncing, setSyncing] = useState(false);
             const [auth, setAuth] = useState({ isAuthenticated: false, user: null });
+            const [needsSetup, setNeedsSetup] = useState(false);
+            const [isLoaded, setIsLoaded] = useState(false);
+            const [isDirty, setIsDirty] = useState(false);
+
+            const updateData = (newDataOrFn) => {
+                if (typeof newDataOrFn === 'function') {
+                    setData(prev => {
+                        const res = newDataOrFn(prev);
+                        setIsDirty(true);
+                        return res;
+                    });
+                } else {
+                    setData(newDataOrFn);
+                    setIsDirty(true);
+                }
+            };
 
             useEffect(() => {
-                // Check if already authenticated for this session
+                const s = getSettings();
+                if (!s.username || !s.password) {
+                    setNeedsSetup(true);
+                }
                 const sessionAuth = sessionStorage.getItem('pandya-auth');
                 if (sessionAuth) setAuth(JSON.parse(sessionAuth));
             }, []);
@@ -656,52 +702,80 @@
                             setSyncing(true);
                             try {
                                 const cloudData = await fetchCloud(savedSettings.cloudUrl);
-                                if (cloudData && typeof cloudData === 'object' && Object.keys(cloudData).length > 0) {
+                                if (cloudData && typeof cloudData === 'object') {
                                     const merged = {
-                                        staff: cloudData.staff || [],
-                                        archivedStaff: cloudData.archivedStaff || [],
-                                        attendance: cloudData.attendance || [],
-                                        payments: cloudData.payments || []
+                                        staff: Array.isArray(cloudData.staff) ? cloudData.staff : [],
+                                        archivedStaff: Array.isArray(cloudData.archivedStaff) ? cloudData.archivedStaff : [],
+                                        attendance: Array.isArray(cloudData.attendance) ? cloudData.attendance : [],
+                                        payments: Array.isArray(cloudData.payments) ? cloudData.payments : []
                                     };
-                                    initialData = merged;
-                                    await setStorage(merged);
+                                    // If cloud has data, it wins
+                                    if (merged.staff.length > 0 || merged.attendance.length > 0 || merged.payments.length > 0) {
+                                        initialData = merged;
+                                        await setStorage(merged);
+                                        setData(prev => ({ ...prev, ...merged }));
+                                    }
                                 }
                             } catch (err) { console.error("Initial Sync Error:", err); }
                             setSyncing(false);
                         }
                         if (initialData) setData(initialData);
                         setLoading(false);
+                        setIsLoaded(true);
+                        setIsDirty(false); // Reset dirty flag after initial load
                     };
                     load();
                 }
             }, [auth]);
 
             useEffect(() => {
-                if (!loading && auth.isAuthenticated && auth.user === 'admin') {
+                if (isLoaded && isDirty && auth.user === 'admin') {
                     setStorage(data);
-                    if (settings.cloudUrl) saveCloud(settings.cloudUrl, data);
+                    if (settings.cloudUrl) {
+                        const payload = { ...data, settings };
+                        saveCloud(settings.cloudUrl, payload);
+                        setIsDirty(false); // Reset after push
+                    }
                 }
-            }, [data, loading, settings.cloudUrl, auth]);
+            }, [data, isLoaded, isDirty, settings.cloudUrl, auth]);
 
             const triggerCloudSync = async () => {
                 if (!settings.cloudUrl) return;
                 setSyncing(true);
                 const cloudData = await fetchCloud(settings.cloudUrl);
-                if (cloudData && typeof cloudData === 'object' && Object.keys(cloudData).length > 0) {
-                    setData(cloudData);
-                    showToast("Synced from Cloud");
-                } else if (cloudData && typeof cloudData === 'object') {
-                    showToast("Cloud is empty - nothing to pull");
+                if (cloudData && typeof cloudData === 'object') {
+                    const extractedData = {
+                        staff: Array.isArray(cloudData.staff) ? cloudData.staff : [],
+                        archivedStaff: Array.isArray(cloudData.archivedStaff) ? cloudData.archivedStaff : [],
+                        attendance: Array.isArray(cloudData.attendance) ? cloudData.attendance : [],
+                        payments: Array.isArray(cloudData.payments) ? cloudData.payments : []
+                    };
+                    if (extractedData.staff.length > 0 || extractedData.attendance.length > 0 || extractedData.payments.length > 0) {
+                        setData(extractedData);
+                        setIsDirty(false);
+                        showToast("Synced from Cloud");
+                    } else {
+                        showToast("Cloud data found but is empty.");
+                    }
                 } else {
-                    showToast("Cloud sync failed - check console");
+                    showToast("Cloud sync failed or URL invalid.");
                 }
                 setSyncing(false);
             };
 
-            const pushLocalToCloud = async () => {
+            const pushLocalToCloud = async (force = false) => {
                 if (!settings.cloudUrl) return;
+
+                // SAFETY: Don't push empty data unless forced
+                if (!force && data.staff.length === 0 && data.attendance.length === 0 && data.payments.length === 0) {
+                    console.log("Push canceled: Local data is empty. Use Force Push if intended.");
+                    showToast("Push canceled: Local data is empty.");
+                    return;
+                }
+
                 setSyncing(true);
-                const ok = await saveCloud(settings.cloudUrl, data);
+                const payload = { ...data, settings };
+                const ok = await saveCloud(settings.cloudUrl, payload);
                 if (ok) showToast("Data pushed to Cloud!");
                 else showToast("Push failed - check console");
                 setSyncing(false);
@@ -733,20 +807,53 @@
                 showToast("Logged out");
             };
 
+            const handleSetup = (username, password, cloudUrl) => {
+                const newSettings = { username, password, cloudUrl };
+                saveSettings(newSettings);
+                setSettingsState(newSettings);
+                setNeedsSetup(false);
+                showToast("Setup Complete! Please login.");
+            };
+
+            const handleCloudLink = async (url) => {
+                setSyncing(true);
+                const cloudData = await fetchCloud(url);
+                if (cloudData) {
+                    const cloudSettings = cloudData.settings || {};
+                    const newSettings = {
+                        username: cloudSettings.username || '',
+                        password: cloudSettings.password || '',
+                        cloudUrl: url
+                    };
+                    saveSettings(newSettings);
+                    setSettingsState(newSettings);
+
+                    if (newSettings.username && newSettings.password) {
+                        setNeedsSetup(false);
+                        showToast("Cloud linked! Please login.");
+                    } else {
+                        showToast("Connected! Now create your admin credentials below.");
+                        // The URL is now in state, they just need to fill User/Pass
+                    }
+                } else {
+                    showToast("Could not connect to this URL.");
+                }
+                setSyncing(false);
+            };
+
             const currentStaff = useMemo(() => [...data.staff, ...data.archivedStaff], [data.staff, data.archivedStaff]);
 
             const calculateStaffFinancials = (staffId, reportRange = null) => {
+                // ... (Existing implementation remains same)
                 const staff = currentStaff.find(s => s.id === staffId);
                 if (!staff) return { earned: 0, paid: 0, balance: 0, absent: 0, half: 0, totalDays: 0 };
 
-                // Determine date range
                 const today = getToday();
                 const rangeStart = reportRange ? (staff.startDate > reportRange.start ? staff.startDate : reportRange.start) : staff.startDate;
                 let rangeEnd = reportRange ? reportRange.end : today;
                 if (rangeEnd > today) rangeEnd = today;
 
                 const totalDays = countDays(rangeStart, rangeEnd);
-
                 const staffAttendance = data.attendance.filter(a =>
                     a.staffId === staffId &&
                     a.date >= rangeStart &&
@@ -762,8 +869,6 @@
                     .filter(p => p.staffId === staffId && p.date >= rangeStart && p.date <= rangeEnd)
                     .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-                // For balance, we usually want the global balance (Total Earned ever - Total Paid ever)
-                // unless explicitly doing a monthly report settlement.
                 let globalPaid = data.payments
                     .filter(p => p.staffId === staffId)
                     .reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -783,6 +888,7 @@
                 };
             };
 
+            if (needsSetup) return <SetupView onSetup={handleSetup} onCloudLink={handleCloudLink} onDemo={() => handleLogin('demo', 'demo')} syncing={syncing} />;
             if (!auth.isAuthenticated) return <LoginView onLogin={handleLogin} />;
             if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '50px' }}>Loading...</div>;
 
@@ -806,11 +912,11 @@
                                 CLOUD SYNCING...
                             </div>
                         )}
-                        {activeTab === 'staff' && <StaffTab data={data} setData={setData} />}
-                        {activeTab === 'attendance' && <AttendanceTab data={data} setData={setData} />}
-                        {activeTab === 'payments' && <PaymentsTab data={data} setData={setData} />}
+                        {activeTab === 'staff' && <StaffTab data={data} setData={updateData} />}
+                        {activeTab === 'attendance' && <AttendanceTab data={data} setData={updateData} />}
+                        {activeTab === 'payments' && <PaymentsTab data={data} setData={updateData} />}
                         {activeTab === 'summary' && <SummaryTab data={data} calculate={calculateStaffFinancials} />}
-                        {activeTab === 'reports' && <ReportsTab data={data} calculate={calculateStaffFinancials} setData={setData} />}
+                        {activeTab === 'reports' && <ReportsTab data={data} calculate={calculateStaffFinancials} setData={updateData} />}
                         {activeTab === 'settings' && (
                             <SettingsTab
                                 settings={settings}
@@ -1563,6 +1669,63 @@
             );
         };
 
+        const SetupView = ({ onSetup, onCloudLink, onDemo, syncing }) => {
+            const [mode, setMode] = useState('new'); // 'new' or 'connect'
+            const [user, setUser] = useState('');
+            const [pass, setPass] = useState('');
+            const [url, setUrl] = useState('');
+
+            return (
+                <div className="login-container" style={{ background: 'linear-gradient(135deg, #fff5f0, #fff)' }}>
+                    <div className="login-card" style={{ maxWidth: '400px' }}>
+                        <div className="auth-badge">FIRST-TIME SETUP</div>
+                        <h2>Payroll Management</h2>
+                        <p>Configure your secure admin access to get started.</p>
+
+                        <div className="toggle-group">
+                            <button className={`toggle-btn ${mode === 'new' ? 'active' : ''}`} onClick={() => setMode('new')}>New Setup</button>
+                            <button className={`toggle-btn ${mode === 'connect' ? 'active' : ''}`} onClick={() => setMode('connect')}>Connect Cloud</button>
+                        </div>
+
+                        {mode === 'new' ? (
+                            <form onSubmit={e => { e.preventDefault(); onSetup(user, pass, url); }}>
+                                <div className="form-group">
+                                    <label style={{ textAlign: 'left' }}>Admin Username</label>
+                                    <input placeholder="e.g. Jayesh" value={user} onChange={e => setUser(e.target.value)} required />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{ textAlign: 'left' }}>Admin Password</label>
+                                    <input type="password" placeholder="Choose a secure password" value={pass} onChange={e => setPass(e.target.value)} required />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{ textAlign: 'left' }}>Google Script URL (Optional)</label>
+                                    <input placeholder="https://script.google.com/..." value={url} onChange={e => setUrl(e.target.value)} />
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-medium)', marginTop: '4px', textAlign: 'left' }}>You can add this later in Settings.</p>
+                                </div>
+                                <button type="submit" className="btn btn-primary">Create Admin Account</button>
+                            </form>
+                        ) : (
+                            <form onSubmit={e => { e.preventDefault(); onCloudLink(url); }}>
+                                <p style={{ fontSize: '0.85rem', marginBottom: '20px', textAlign: 'left' }}>Enter your Google Script URL to pull your existing username and password from the cloud.</p>
+                                <div className="form-group">
+                                    <label style={{ textAlign: 'left' }}>Google Script URL</label>
+                                    <input placeholder="https://script.google.com/..." value={url} onChange={e => setUrl(e.target.value)} required />
+                                </div>
+                                <button type="submit" className="btn btn-primary" disabled={syncing}>
+                                    {syncing ? 'Connecting...' : 'Link Cloud Account'}
+                                </button>
+                            </form>
+                        )}
+
+                        <div style={{ marginTop: 30, paddingTop: 20, borderTop: '1px solid var(--border-cream)' }}>
+                            <p style={{ fontSize: '0.8rem', marginBottom: 10 }}>Just exploring?</p>
+                            <button className="btn btn-ghost btn-sm" onClick={onDemo}>Enter Demo Mode</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const LoginView = ({ onLogin }) => {
             const [user, setUser] = useState('');
             const [pass, setPass] = useState('');
@@ -1662,7 +1825,7 @@
                         </div>
                         <div className="form-group">
                             <label>Admin Password</label>
-                            <input type="text" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
+                            <input type="password" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
                         </div>
                         <button className="btn btn-primary" onClick={handleSave}>Save Credentials</button>
                     </div>
@@ -1685,6 +1848,12 @@
                             />
                         </div>
                         <button className="btn btn-primary" onClick={handleSave}>Update Cloud URL</button>
+
+                        <div style={{ marginTop: '20px', padding: '10px', background: '#fff9c4', borderRadius: '8px', border: '1px solid #fbc02d' }}>
+                            <p style={{ fontSize: '0.75rem', margin: 0, color: '#616161' }}>
+                                <b>Security Tip:</b> Your credentials are saved locally in this browser. Use **Push Data** below to save them to your Google Sheet for multi-device login.
+                            </p>
+                        </div>
                     </div>
 
                     <div className="card no-print">
