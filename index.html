@@ -888,14 +888,16 @@
                 };
             };
 
-            if (needsSetup) return <SetupView onSetup={handleSetup} onCloudLink={handleCloudLink} onDemo={() => handleLogin('demo', 'demo')} syncing={syncing} />;
-            if (!auth.isAuthenticated) return <LoginView onLogin={handleLogin} />;
+            if (!auth.isAuthenticated) {
+                if (needsSetup) return <SetupView onSetup={handleSetup} onCloudLink={handleCloudLink} onDemo={() => handleLogin('demo', 'demo')} syncing={syncing} />;
+                return <LoginView onLogin={handleLogin} />;
+            }
             if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '50px' }}>Loading...</div>;
 
             return (
                 <div>
                     <header style={{ position: 'relative' }}>
-                        <h1>Pandya Namkeen and Sweets</h1>
+                        <h1>{auth.user === 'demo' ? 'Your Business Name' : 'Pandya Namkeen and Sweets'}</h1>
                         <p>Payroll System {auth.user === 'demo' && <b>(DEMO)</b>}</p>
                         <button
                             className="no-print"
