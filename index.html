@@ -515,7 +515,8 @@
             const defaults = {
                 cloudUrl: '',
                 username: '',
-                password: ''
+                password: '',
+                businessName: ''
             };
             const s = localStorage.getItem(SETTINGS_KEY);
             if (!s) return defaults;
@@ -807,8 +808,8 @@
                 showToast("Logged out");
             };
 
-            const handleSetup = (username, password, cloudUrl) => {
-                const newSettings = { username, password, cloudUrl };
+            const handleSetup = (username, password, cloudUrl, businessName) => {
+                const newSettings = { username, password, cloudUrl, businessName };
                 saveSettings(newSettings);
                 setSettingsState(newSettings);
                 setNeedsSetup(false);
@@ -823,7 +824,8 @@
                     const newSettings = {
                         username: cloudSettings.username || '',
                         password: cloudSettings.password || '',
-                        cloudUrl: url
+                        cloudUrl: url,
+                        businessName: cloudSettings.businessName || ''
                     };
                     saveSettings(newSettings);
                     setSettingsState(newSettings);
@@ -897,7 +899,7 @@
             return (
                 <div>
                     <header style={{ position: 'relative' }}>
-                        <h1>{auth.user === 'demo' ? 'Your Business Name' : 'Pandya Namkeen and Sweets'}</h1>
+                        <h1>{auth.user === 'demo' ? 'Your Business Name' : (settings.businessName || 'Payroll Management')}</h1>
                         <p>Payroll System {auth.user === 'demo' && <b>(DEMO)</b>}</p>
                         <button
                             className="no-print"
@@ -1676,6 +1678,7 @@
             const [user, setUser] = useState('');
             const [pass, setPass] = useState('');
             const [url, setUrl] = useState('');
+            const [business, setBusiness] = useState('');
 
             return (
                 <div className="login-container" style={{ background: 'linear-gradient(135deg, #fff5f0, #fff)' }}>
@@ -1690,7 +1693,11 @@
                         </div>
 
                         {mode === 'new' ? (
-                            <form onSubmit={e => { e.preventDefault(); onSetup(user, pass, url); }}>
+                            <form onSubmit={e => { e.preventDefault(); onSetup(user, pass, url, business); }}>
+                                <div className="form-group">
+                                    <label style={{ textAlign: 'left' }}>Business Name</label>
+                                    <input placeholder="e.g. My Awesome Shop" value={business} onChange={e => setBusiness(e.target.value)} required />
+                                </div>
                                 <div className="form-group">
                                     <label style={{ textAlign: 'left' }}>Admin Username</label>
                                     <input placeholder="e.g. Jayesh" value={user} onChange={e => setUser(e.target.value)} required />
@@ -1789,13 +1796,14 @@
             const [url, setUrl] = useState(settings.cloudUrl);
             const [adminUser, setAdminUser] = useState(settings.username);
             const [adminPass, setAdminPass] = useState(settings.password);
+            const [businessName, setBusinessName] = useState(settings.businessName || '');
 
             const handleSave = () => {
                 if (url && !url.startsWith('https://script.google.com')) {
                     alert("Please enter a valid Google Apps Script URL");
                     return;
                 }
-                setSettings({ ...settings, cloudUrl: url, username: adminUser, password: adminPass });
+                setSettings({ ...settings, cloudUrl: url, username: adminUser, password: adminPass, businessName });
                 showToast("Settings saved!");
             };
 
@@ -1812,6 +1820,18 @@
             return (
                 <div className="settings-view">
                     <h2 className="no-print">Settings</h2>
+
+                    <div className="card no-print">
+                        <div className="flex" style={{ marginBottom: 10, alignItems: 'center' }}>
+                            <Icons.Settings />
+                            <h3 style={{ margin: '0 0 0 10px' }}>General Settings</h3>
+                        </div>
+                        <div className="form-group">
+                            <label>Business Name</label>
+                            <input value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="App Title" />
+                        </div>
+                        <button className="btn btn-primary" onClick={handleSave}>Update Business Name</button>
+                    </div>
 
                     <div className="card no-print">
                         <div className="flex" style={{ marginBottom: 10, alignItems: 'center' }}>
