@@ -1710,17 +1710,17 @@
                                     <input placeholder="e.g. My Awesome Shop" value={business} onChange={e => setBusiness(e.target.value)} required />
                                 </div>
                                 <div className="form-group">
-                                    <label style={{ textAlign: 'left' }}>Admin Username</label>
-                                    <input placeholder="e.g. Jayesh" value={user} onChange={e => setUser(e.target.value)} required />
+                                    <label style={{ textAlign: 'left' }}>User ID</label>
+                                    <input placeholder="e.g. jayshree" value={user} onChange={e => setUser(e.target.value)} required />
                                 </div>
                                 <div className="form-group">
-                                    <label style={{ textAlign: 'left' }}>Admin Password</label>
+                                    <label style={{ textAlign: 'left' }}>Password</label>
                                     <input type="password" placeholder="Choose a secure password" value={pass} onChange={e => setPass(e.target.value)} required />
                                 </div>
                                 <div className="form-group">
-                                    <label style={{ textAlign: 'left' }}>Google Script URL (Optional)</label>
+                                    <label style={{ textAlign: 'left' }}>Cloud Link (Google Script URL)</label>
                                     <input placeholder="https://script.google.com/..." value={url} onChange={e => setUrl(e.target.value)} />
-                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-medium)', marginTop: '4px', textAlign: 'left' }}>You can add this later in Settings.</p>
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-medium)', marginTop: '4px', textAlign: 'left' }}>Optional: You can add this later in Settings.</p>
                                 </div>
                                 <button type="submit" className="btn btn-primary">Create Admin Account</button>
                             </form>
